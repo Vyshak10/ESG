@@ -4,6 +4,7 @@ const cors = require('cors');
 const dotenv = require('dotenv');
 const path = require('path');
 const multer = require('multer');
+const cron = require('node-cron');
 
 // Load environment variables
 dotenv.config();
@@ -12,13 +13,17 @@ dotenv.config();
 const authRoutes = require('./routes/auth');
 const companyRoutes = require('./routes/companies');
 const reportRoutes = require('./routes/reports');
+const newsRoutes = require('./routes/news');
+
+// Import services
+const { runNewsUpdateForAll } = require('./services/newsService');
 
 // Initialize Express app
 const app = express();
 
 // Middleware
 app.use(cors({
-    origin: 'http://localhost:3000',
+    origin: ['http://localhost:3000', 'http://localhost:3002'],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization']
@@ -59,6 +64,7 @@ app.get('/', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/companies', companyRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/news', newsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -91,6 +97,19 @@ app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
     console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
     console.log(`🐍 Python Service URL: ${process.env.PYTHON_SERVICE_URL || 'http://localhost:8000'}`);
+
+    // Schedule daily news analysis at 2:00 AM
+    cron.schedule('0 2 * * *', async () => {
+        console.log('🕐 [CRON] Running scheduled daily news update...');
+        try {
+            await runNewsUpdateForAll();
+        } catch (err) {
+            console.error('[CRON] News update failed:', err.message);
+        }
+    }, {
+        timezone: 'Asia/Kolkata'
+    });
+    console.log('📰 News cron job scheduled: daily at 2:00 AM IST');
 });
 
 module.exports = app;

@@ -111,6 +111,14 @@ class ResultResponse(BaseModel):
     result: Optional[dict] = None
     error: Optional[str] = None
 
+class TextAnalysisRequest(BaseModel):
+    text: str
+
+class TextAnalysisResponse(BaseModel):
+    esg_category: str
+    sentiment: str
+    sentiment_confidence: float
+
 # --- ENDPOINTS ---
 
 @app.get("/health")
@@ -121,6 +129,57 @@ async def health_check():
         "model_loaded": esg_analyzer is not None,
         "active_jobs": len(analysis_jobs)
     }
+
+@app.post("/analyze-text", response_model=TextAnalysisResponse)
+async def analyze_text(request: TextAnalysisRequest):
+    """
+    Analyse a raw text string (e.g. a news headline + description) for:
+    - ESG Category: Environmental / Social / Governance / None
+    - Sentiment:    Positive / Negative / Neutral
+    Used by the Node.js newsService to process news articles.
+    """
+    analyzer = get_analyzer()
+    if not analyzer:
+        raise HTTPException(status_code=503, detail="Model not loaded yet. Try again shortly.")
+
+    text = request.text.strip()
+    if len(text) < 10:
+        raise HTTPException(status_code=400, detail="Text too short for analysis")
+
+    try:
+        # Stage 1: ESG Categorization
+        cat_output = analyzer.nlp_esg(text, truncation=True, max_length=512, top_k=1)
+        esg_category = cat_output[0]['label']
+        cat_score = cat_output[0]['score']
+
+        # Keyword rescue for Governance (same logic as PDF analyzer)
+        GOV_KEYWORDS = [
+            "board", "executive compensation", "whistleblower", "code of conduct",
+            "anti-corruption", "bribery", "audit", "risk management",
+            "shareholder", "compliance", "ethics", "remuneration",
+            "independent director", "gdpr", "data privacy"
+        ]
+        if esg_category == "None" or cat_score < 0.6:
+            if any(kw in text.lower() for kw in GOV_KEYWORDS):
+                esg_category = "Governance"
+                cat_score = 0.85
+            else:
+                esg_category = "None"
+
+        # Stage 2: Sentiment Analysis
+        sent_output = analyzer.nlp_tone(text, truncation=True, max_length=512, top_k=1)
+        sentiment = sent_output[0]['label']
+        sentiment_confidence = round(float(sent_output[0]['score']), 4)
+
+        return {
+            "esg_category": esg_category,
+            "sentiment": sentiment,
+            "sentiment_confidence": sentiment_confidence
+        }
+
+    except Exception as e:
+        logger.error(f"Text analysis failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)}")
 
 @app.post("/analyze", response_model=TaskResponse)
 async def start_analysis(

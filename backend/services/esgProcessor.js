@@ -72,7 +72,7 @@ class ESGProcessorService {
                 // 2. Poll for Results
                 let analysisResult = null;
                 let attempts = 0;
-                const maxAttempts = 60; // 5 minutes (if polling every 5s)
+                const maxAttempts = 240; // 20 minutes (polling every 5s)
                 const pollInterval = 5000; // 5 seconds
 
                 while (attempts < maxAttempts) {
@@ -82,7 +82,7 @@ class ESGProcessorService {
                     try {
                         const statusResponse = await axios.get(`${this.pythonServiceUrl}/results/${taskId}`);
                         const statusData = statusResponse.data;
-                        console.log(`Polling Task ${taskId}: ${statusData.status}`);
+                        console.log(`Polling Task ${taskId}: ${statusData.status} (attempt ${attempts}/${maxAttempts})`);
 
                         if (statusData.status === 'completed') {
                             analysisResult = statusData.result;
@@ -100,7 +100,7 @@ class ESGProcessorService {
                 }
 
                 if (!analysisResult) {
-                    throw new Error('Analysis timed out after 5 minutes');
+                    throw new Error('Analysis timed out after 20 minutes');
                 }
 
                 // Update report with analysis results

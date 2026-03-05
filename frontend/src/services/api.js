@@ -60,4 +60,12 @@ export const reportsAPI = {
     delete: (reportId) => api.delete(`/reports/${reportId}`)
 };
 
+// News Impact API
+export const newsAPI = {
+    getByCompany: (companyId) => api.get(`/news/${companyId}`),
+    refresh: (companyId) => api.post(`/news/refresh/${companyId}`),
+    refreshAll: () => api.post('/news/refresh-all')
+};
+
 export default api;
+
